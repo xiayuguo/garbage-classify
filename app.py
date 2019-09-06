@@ -9,9 +9,11 @@ from wechatpy.exceptions import (
     InvalidAppIdException,
 )
 
+from data import data
+
 # set token or get from environments
 TOKEN = os.getenv('WECHAT_TOKEN', '123456')
-AES_KEY = os.getenv('WECHAT_AES_KEY', '')
+# AES_KEY = os.getenv('WECHAT_AES_KEY', '')
 APPID = os.getenv('WECHAT_APPID', '')
 ENCODING_AES_KEY = os.getenv('WECHAT_EAESKEY', '')
 
@@ -20,7 +22,7 @@ app = Flask(__name__)
 
 @app.route("/")
 def index():
-    return ""
+    return "hello, world"
 
 
 @app.route('/wechat', methods=['GET', 'POST'])
@@ -51,7 +53,7 @@ def wechat():
         # encryption mode
         from wechatpy.crypto import WeChatCrypto
 
-        crypto = WeChatCrypto(TOKEN, AES_KEY, APPID)
+        crypto = WeChatCrypto(TOKEN, ENCODING_AES_KEY, APPID)
         try:
             msg = crypto.decrypt_message(
                 request.data,
@@ -64,7 +66,7 @@ def wechat():
         else:
             msg = parse_message(msg)
             if msg.type == 'text':
-                reply = create_reply(msg.content, msg)
+                reply = create_reply(data.get(msg.content, "“{0}”，Feed还小，不知道你在说什么?".format(msg.content)), msg)
             else:
                 reply = create_reply('Sorry, can not handle this for now', msg)
             return crypto.encrypt_message(reply.render(), nonce, timestamp)
