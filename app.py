@@ -1,7 +1,8 @@
 # coding:utf8
 import os
+import logging
 
-from flask import Flask, request, abort, render_template
+from flask import Flask, request, abort
 from wechatpy import parse_message, create_reply
 from wechatpy.utils import check_signature
 from wechatpy.exceptions import (
@@ -9,7 +10,7 @@ from wechatpy.exceptions import (
     InvalidAppIdException,
 )
 
-from data import data
+from db import fetchone_by_name
 
 # set token or get from environments
 TOKEN = os.getenv('WECHAT_TOKEN', '123456')
@@ -18,6 +19,23 @@ APPID = os.getenv('WECHAT_APPID', '')
 ENCODING_AES_KEY = os.getenv('WECHAT_EAESKEY', '')
 
 app = Flask(__name__)
+gunicorn_logger = logging.getLogger('gunicorn.error')
+app.logger.handlers = gunicorn_logger.handlers
+
+category = {
+    1: "可回收垃圾",
+    2: "有害垃圾",
+    4: "湿垃圾",
+    8: "干垃圾",
+    16: "大件垃圾"
+}
+
+
+@app.after_request
+def after_request(response):
+    resp = response.data.decode('utf-8')
+    app.logger.info(resp)
+    return response
 
 
 @app.route("/")
@@ -65,11 +83,31 @@ def wechat():
             abort(403)
         else:
             msg = parse_message(msg)
+            app.logger.info(msg)
             if msg.type == 'text':
-                reply = create_reply(data.get(msg.content, "“{0}”，Feed还小，不知道你在说什么?".format(msg.content)), msg)
+                result = fetchone_by_name(msg.content)
+                if result:
+                    reply_msg = category.get(result, "知不道")
+                else:
+                    reply_msg = "抱歉, Feed还小，不知道“{0}”是什么垃圾".format(msg.content)
+                reply = create_reply(reply_msg, msg)
             else:
                 reply = create_reply('Sorry, can not handle this for now', msg)
-            return crypto.encrypt_message(reply.render(), nonce, timestamp)
+            app.logger.info("test")
+
+            return crypto.encrypt_message("".join(reply.render().split()), nonce, timestamp)
+
+
+@app.route("/test", methods=["POST"])
+def test():
+    params = request.get_json()
+    msg = params["msg"]
+    result = fetchone_by_name(msg)
+    if result:
+        reply_msg = category.get(result)
+    else:
+        reply_msg = "抱歉, Feed还小，不知道“{0}”是什么垃圾？".format(msg)
+    return reply_msg
 
 
 if __name__ == '__main__':
